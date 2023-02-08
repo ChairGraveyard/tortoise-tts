@@ -1,3 +1,128 @@
+[click me](#installation) to skip to installation && usage!
+
+# Speeding up TorToiSe inference 5x
+This is a working project to drastically boost the performance of TorToiSe, without modifying the base models. **Expect speedups of _5~10x_**, and hopefully 20x or larger when this project is complete.
+
+This repo adds the following config options for TorToiSe for faster inference:
+ - [X] (`--kv_cache`) enabling of [KV cache](https://kipp.ly/blog/transformer-inference-arithmetic/#kv-cache) for MUCH faster GPT sampling
+ - [X] (`--half`) half precision inference where possible
+ - [X] (`--sampler dpm++2m`) [k-diffusion](https://github.com/crowsonkb/k-diffusion) samplers for faster diffusion
+ - [X] (disable with `--low_vram`) option to toggle cpu offloading, for high vram users
+
+All changes in this fork are licensed under the **AGPL**. For avoidance beyond all doubt, the [following statement](https://en.wikipedia.org/wiki/Apache_License#Licensing_conditions) is added as a comment to all changed code files:
+
+> `AGPL: a notification must be added stating that changes have been made to that file. `
+
+## Current results
+All results listed were generated with a slightly undervolted RTX 3090 on Ubuntu 22.04, with the following base command:
+
+```sh
+python tortoise/do_tts.py --voice emma --seed 42 --text "$TEXT"
+```
+
+Original TorToiSe [repo](https://github.com/neonbjb/tortoise-tts):
+| speed (B) | speed (A) | preset | sample | 
+|-|-|-|-|
+| 112.81s | 14.94s | ultra_fast | [here](optimized_examples/A/tortoise_original-with_original_vram/) |
+
+New [repo](https://github.com/152334H/tortoise-tts), with `--preset ultra_fast`:
+| speed (B) | speed (A) | GPT kv-cache | sampler | cond-free diffusion | autocast to fp16 | samples |
+|-|-|-|-|-|-|-|
+|  118.61   |   11.20   | ❌           | DDIM    | ❌                  | ❌               | [here](optimized_examples/A/tortoise_original/) |
+|  115.51   |   10.67   | ❌           | DPM++2M | ✅                  | ❌               | [here](optimized_examples/A/ultra_fast/) |
+|  114.58   |   10.24   | ❌           | DPM++2M | ❌                  | ❌               | [here](optimized_examples/A/ultra_fast-no_cond_tree/) |
+|   55.76   |    7.25   | ❌           | DDIM    | ❌                  | ✅               | [here](optimized_examples/A/tortoise_original-half_incomplete/) |
+|   53.59   |    6.77   | ❌           | DPM++2M | ✅                  | ✅               | [here](optimized_examples/A/ultra_fast-half/) |
+|   51.98   |    6.29   | ❌           | DPM++2M | ❌                  | ✅               | [here](optimized_examples/A/ultra_fast-half-no_cond_tree/) |
+|    9.86   |    4.24   | ✅           | DDIM    | ❌                  | ❌               | [here](optimized_examples/A/tortoise_original-kv_cache/) |
+|    8.51   |    3.77   | ✅           | DPM++2M | ✅                  | ❌               | [here](optimized_examples/A/ultra_fast-kv_cache/) |
+|    8.12   |    3.82   | ✅           | DPM++2M | ✅                  | ✅               | [here](optimized_examples/A/ultra_fast-kv_cache-half/) |
+|    6.78   |    3.35   | ✅           | DPM++2M | ❌                  | ✅               | [here](optimized_examples/A/ultra_fast-kv_cache-half-no_cond_tree/) |
+
+Results measure the time taken to run **`tts.tts_with_preset(...)`** in `do_tts.py`.
+
+The example texts used were:
+
+A (70 characters)
+> I'm looking for contributors who can do optimizations better than me.
+
+B (188 characters)
+> Then took the other, as just as fair,
+>
+> And having perhaps the better claim,
+>
+> Because it was grassy and wanted wear;
+>
+> Though as for that the passing there
+>
+> Had worn them really about the same,
+
+Half precision currently significantly worsens outputs, so I do not recommend enabling it unless you are happy with the samples linked. Using `cond_free` with half precision seems to produce decent outputs.
+
+## Installation
+The installation process is identical to the original tortoise-tts repo.
+
+```shell
+git clone https://github.com/152334H/tortoise-tts.git
+cd tortoise-tts
+python -m pip install -r ./requirements.txt
+python setup.py install
+```
+
+Note that if you have the original tortoise installed,
+* You will need to uninstall it (`pip uninstall tortoise`)
+* You will need to install the new requirements (`pip install -r requirements.txt`)
+* You may want to install this repository as a symbolic link (`pip install -e .`), as this repository will be updated frequently
+
+#### pytorch issues
+If you are experiencing errors related to GPU usage (or lackthereof), please see the instructions on [the pytorch website](https://pytorch.org/get-started/locally/) to install pytorch with proper GPU support.
+
+## Usage
+For maximum speed (and worst quality), you can try:
+
+```sh
+python tortoise/do_tts.py --kv_cache --half --no_cond_free --preset ultra_fast --text #...
+# or, to only generate 1 sample:
+python tortoise/do_tts.py --kv_cache --half --no_cond_free --preset single_sample --candidates 1 --text #...
+```
+
+But in most cases, these settings should perform decently && fast:
+
+```sh
+python tortoise/do_tts.py --kv_cache --preset ultra_fast --text # ...
+```
+
+You can obtain outputs 100% identical to the original tortoise repo with the following command:
+
+```sh
+python tortoise/do_tts.py --preset ultra_fast_old --text #...
+```
+
+## Future plans
+Optimization related:
+- [ ] add more k-diffusion samplers; optimize diffusion step count
+- [ ] **fix KV cache** implementation
+- [ ] **add TensorRT model**. 90% of inference time is spent in the GPT model; compiling it should produce great speedups, but it requires:
+    - [ ] a less hacky `transformers` model definition (see `GPT2InferenceModel`)
+    - [ ] an ORTModelForCausalLM implementation for tortoise
+    - [ ] tensorRT runtime
+- [ ] try half precision in the vocoder + diffuser
+
+QoL related:
+- [ ] display samples on github pages, where you can do audio embeddings
+- [ ] implement new args in places other than ./tortoise/do_tts.py
+- [ ] fix api usage with new args
+- [ ] webui integration???
+
+## Motivation
+As stated by an [11Labs](https://beta.elevenlabs.io) developer:
+
+![](https://cdn.discordapp.com/attachments/1070203929410940988/1071295918269272124/Screenshot_20230204-130541_Discord.png)
+
+Original README description:
+
+---
+
 # TorToiSe
 
 Tortoise is a text-to-speech program built with the following priorities:

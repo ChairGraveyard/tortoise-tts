@@ -6,6 +6,7 @@ https://github.com/hojonathanho/diffusion/blob/1e0dceb3b3495bbe19116a5e1b3596cd0
 
 Docstrings have been added, as well as DDIM sampling and a new collection of beta schedules.
 """
+# AGPL: a notification must be added stating that changes have been made to that file. 
 
 import enum
 import math
@@ -13,8 +14,11 @@ import math
 import numpy as np
 import torch
 import torch as th
-from tqdm import tqdm
+from tqdm import tqdm, trange
 
+from k_diffusion.sampling import sample_euler_ancestral, sample_dpmpp_2m
+from k_diffusion.sampling import get_sigmas_karras
+K_DIFFUSION_SAMPLERS = {'k_euler_a': sample_euler_ancestral, 'dpm++2m': sample_dpmpp_2m}
 
 def normal_kl(mean1, logvar1, mean2, logvar2):
     """
@@ -200,7 +204,9 @@ class GaussianDiffusion:
         conditioning_free=False,
         conditioning_free_k=1,
         ramp_conditioning_free=True,
+        sampler='ddim'
     ):
+        self.sampler = sampler
         self.model_mean_type = ModelMeanType(model_mean_type)
         self.model_var_type = ModelVarType(model_var_type)
         self.loss_type = LossType(loss_type)
@@ -529,6 +535,26 @@ class GaussianDiffusion:
             )
         sample = out["mean"] + nonzero_mask * th.exp(0.5 * out["log_variance"]) * noise
         return {"sample": sample, "pred_xstart": out["pred_xstart"]}
+
+    TRAINED_DIFFUSION_STEPS = 4000 # HARDCODED
+    def k_diffusion_sample_loop(
+        self, k_sampler, model, shape, noise=None, # all given
+        clip_denoised=True, denoised_fn=None, cond_fn=None, device=None, # ALL UNUSED
+        model_kwargs=None, #{'precomputed_aligned_embeddings': precomputed_embeddings},
+        progress=False,  #unused as well
+    ):
+        if device is None:
+            device = next(model.parameters()).device
+        sigmas = get_sigmas_karras(self.num_timesteps, sigma_min=0.03, sigma_max=14.5, device=device)
+        return k_sampler(model, noise, sigmas, extra_args=model_kwargs, disable=not progress)
+
+    def sample_loop(self, *args, **kwargs):
+        s = self.sampler
+        if s == 'ddim':
+            return self.p_sample_loop(*args, **kwargs)
+        elif s in K_DIFFUSION_SAMPLERS:
+            return self.k_diffusion_sample_loop(k_sampler=K_DIFFUSION_SAMPLERS[s], *args, **kwargs)
+        else: raise RuntimeError("sampler not impl")
 
     def p_sample_loop(
         self,
