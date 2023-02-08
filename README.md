@@ -62,6 +62,15 @@ Half precision currently significantly worsens outputs, so I do not recommend en
 ## Installation
 The installation process is identical to the original tortoise-tts repo.
 
+# Windows Setup
+- Install [Anaconda](https://docs.anaconda.com/anaconda/install/windows/) and [Cuda](https://developer.nvidia.com/cuda-zone)
+- Open Anaconda Powershell Prompt
+- ```cd "tortoise-tts path"```
+- ```conda env create --name tortoise-tts --file=environment.yml```
+- ```conda activate tortoise-tts```
+- ```python setup.py install```
+
+# Linux etc Installation
 ```shell
 git clone https://github.com/152334H/tortoise-tts.git
 cd tortoise-tts
