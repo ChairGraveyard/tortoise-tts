@@ -173,10 +173,10 @@ class Predictor(BasePredictor):
             cvvp_amount=cvvp_amount,
         )
 
-        audio_raw_path = output_dir.joinpath(f"tortoise.wav")
+        audio_raw_path = output_dir.joinpath("tortoise.wav")
         torchaudio.save(str(audio_raw_path), generated_speech.squeeze(0).cpu(), 24000)
 
-        audio_mp3_path = output_dir.joinpath(f"tortoise.mp3")
+        audio_mp3_path = output_dir.joinpath("tortoise.mp3")
         subprocess.check_output(
             [
                 "ffmpeg",

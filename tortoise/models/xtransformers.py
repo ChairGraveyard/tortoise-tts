@@ -206,8 +206,12 @@ class AlibiPositionalBias(nn.Module):
             return get_slopes_power_of_2(heads)
 
         closest_power_of_2 = 2 ** math.floor(math.log2(heads))
-        return get_slopes_power_of_2(closest_power_of_2) + get_slopes_power_of_2(2 * closest_power_of_2)[0::2][
-                                                           :heads - closest_power_of_2]
+        return (
+            get_slopes_power_of_2(closest_power_of_2)
+            + get_slopes_power_of_2(2 * closest_power_of_2)[::2][
+                : heads - closest_power_of_2
+            ]
+        )
 
     def forward(self, qk_dots):
         h, i, j, device = *qk_dots.shape[-3:], qk_dots.device
@@ -358,8 +362,7 @@ class RMSScaleShiftNorm(nn.Module):
 
         ss_emb = self.scale_shift_process(norm_scale_shift_inp)
         scale, shift = torch.chunk(ss_emb, 2, dim=1)
-        h = norm * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
-        return h
+        return norm * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
 
 
 # residual and residual gates
@@ -792,7 +795,9 @@ class AttentionLayers(nn.Module):
         else:
             self.rel_pos = None
 
-        assert not (not pre_norm and sandwich_norm), 'sandwich norm cannot be used when not using prenorm'
+        assert (
+            pre_norm or not sandwich_norm
+        ), 'sandwich norm cannot be used when not using prenorm'
         self.pre_norm = pre_norm
         self.sandwich_norm = sandwich_norm
 
@@ -810,7 +815,7 @@ class AttentionLayers(nn.Module):
 
         if cross_attend and not only_cross:
             default_block = ('a', 'c', 'f')
-        elif cross_attend and only_cross:
+        elif cross_attend:
             default_block = ('c', 'f')
         else:
             default_block = ('a', 'f')

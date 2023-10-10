@@ -265,8 +265,7 @@ class TextToSpeech:
     def temporary_cuda(self,model):
         if self.high_vram: yield model
         else:
-            m = model.to(self.device)
-            yield m
+            yield model.to(self.device)
             m = model.cpu()
 
     def load_cvvp(self):
@@ -291,9 +290,10 @@ class TextToSpeech:
         with torch.no_grad():
             voice_samples = [[v.to(self.device) for v in ls] for ls in voice_samples]
 
-            auto_conds = []
-            for ls in voice_samples:
-                auto_conds.append(format_conditioning(ls[0], device=self.device))
+            auto_conds = [
+                format_conditioning(ls[0], device=self.device)
+                for ls in voice_samples
+            ]
             auto_conds = torch.stack(auto_conds, dim=1)
             with self.temporary_cuda(self.autoregressive) as ar:
                 auto_latent = ar.get_conditioning(auto_conds)
@@ -546,13 +546,10 @@ class TextToSpeech:
                 if self.enable_redaction:
                     return self.aligner.redact(clip.squeeze(1), text).unsqueeze(1)
                 return clip
+
             wav_candidates = [potentially_redact(wav_candidate, text) for wav_candidate in wav_candidates]
 
-            if len(wav_candidates) > 1:
-                res = wav_candidates
-            else:
-                res = wav_candidates[0]
-
+            res = wav_candidates if len(wav_candidates) > 1 else wav_candidates[0]
             if return_deterministic_state:
                 return res, (deterministic_seed, text, voice_samples, conditioning_latents)
             else:
